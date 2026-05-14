@@ -920,12 +920,30 @@ function resolveDaemonResourceDir(resourceRoot, segment, fallback) {
   return resourceRoot ? path.join(resourceRoot, segment) : fallback;
 }
 
+function shouldServeStaticWebShell(req): boolean {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  if (!fs.existsSync(STATIC_INDEX_FILE)) return false;
+  const routePath = String(req.path || '');
+  if (
+    routePath === '/api' ||
+    routePath.startsWith('/api/') ||
+    routePath.startsWith('/_next/') ||
+    routePath.startsWith('/artifacts/') ||
+    routePath.startsWith('/frames/')
+  ) {
+    return false;
+  }
+  if (routePath.startsWith('/projects/')) return true;
+  return path.extname(routePath) === '';
+}
+
 const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot();
 // Built web app lives in `out/` — that's where Next.js writes the static
 // export configured in next.config.ts. The folder name used to be `dist/`
 // when this project shipped with Vite; the daemon serves whatever the
 // frontend toolchain emits, no further config needed.
 const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');
+const STATIC_INDEX_FILE = path.join(STATIC_DIR, 'index.html');
 const OD_BIN = resolveDaemonCliPath();
 const OD_NODE_BIN = process.execPath;
 const SKILLS_DIR = resolveDaemonResourceDir(
@@ -4869,6 +4887,14 @@ export async function startServer({
     validation: validationDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
 
+  });
+
+  app.get('*', (req, res, next) => {
+    if (!shouldServeStaticWebShell(req)) {
+      next();
+      return;
+    }
+    res.type('html').sendFile(STATIC_INDEX_FILE);
   });
 
   // Wait for `listen` to bind so callers always see the resolved URL —
