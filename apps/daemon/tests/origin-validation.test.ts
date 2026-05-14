@@ -79,6 +79,12 @@ function makeTestApp(port: number, host = '127.0.0.1') {
     }
     res.json({ active: true });
   });
+  app.get('/api/active', (req, res) => {
+    if (!isLocalSameOrigin(req, port)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    res.json({ active: true });
+  });
   app.get('/api/projects/:id/raw/:name', (req, res) => {
     // Mimics the real raw-file route that sets CORS for Origin: null
     if (req.headers.origin === 'null') {
@@ -268,6 +274,20 @@ describe('daemon origin validation middleware', () => {
         },
       });
       expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
+  it('allows local guarded read routes without Origin when Host matches a configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'GET', '/api/active', {
+        headers: {
+          Host: 'od.example.com',
+        },
+      });
+      expect(res.status).toBe(200);
     } finally {
       delete process.env.OD_ALLOWED_ORIGINS;
     }

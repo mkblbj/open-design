@@ -19,6 +19,8 @@ export interface BuildMcpInstallPayloadInputs {
   port: number;
   platform: NodeJS.Platform;
   dataDir: string;
+  /** Public or local HTTP base URL that spawned MCP clients should call. */
+  daemonUrl?: string | null;
   electronAsNode: boolean;
   /** True when the daemon was bootstrapped as a sidecar and the
    *  spawned `od mcp` should discover the live URL via the IPC
@@ -68,23 +70,24 @@ export function buildMcpInstallPayload(
   if (inputs.electronAsNode) {
     env.ELECTRON_RUN_AS_NODE = '1';
   }
+  const daemonUrl = normalizeDaemonUrl(inputs.daemonUrl) ?? `http://127.0.0.1:${inputs.port}`;
   // Sidecar mode: omit --daemon-url so the spawned `od mcp` discovers
   // the live URL via the IPC status socket on every spawn, surviving
   // ephemeral-port restarts. Direct `od --port X` launches have no
   // socket and need the URL baked.
-  const args = inputs.isSidecarMode
+  const args = inputs.isSidecarMode && inputs.daemonUrl == null
     ? [inputs.cliPath, 'mcp']
     : [
         inputs.cliPath,
         'mcp',
         '--daemon-url',
-        `http://127.0.0.1:${inputs.port}`,
+        daemonUrl,
       ];
   return {
     command: inputs.execPath,
     args,
     env,
-    daemonUrl: `http://127.0.0.1:${inputs.port}`,
+    daemonUrl,
     // Surface platform so the install panel can localize path hints
     // (~/.cursor vs %USERPROFILE%\.cursor) and keyboard shortcuts
     // (Cmd vs Ctrl).
@@ -93,4 +96,11 @@ export function buildMcpInstallPayload(
     nodeExists: inputs.nodeExists,
     buildHint: hints.length ? hints.join(' ') : null,
   };
+}
+
+function normalizeDaemonUrl(value: string | null | undefined): string | null {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (!/^https?:\/\//i.test(raw)) return null;
+  return raw.replace(/\/+$/u, '');
 }

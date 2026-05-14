@@ -72,6 +72,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       port: getResolvedPort(),
       platform: process.platform,
       dataDir: RUNTIME_DATA_DIR,
+      daemonUrl: getPublicBaseUrl(req),
       electronAsNode: process.env.ELECTRON_RUN_AS_NODE === '1',
       isSidecarMode,
       sidecarEnv,
@@ -292,10 +293,22 @@ function getPublicBaseUrl(req: any) {
   if (env && /^https?:\/\//i.test(env)) {
     return env.replace(/\/+$/u, '');
   }
-  const proto = req.protocol || 'http';
+  const forwardedProto = firstHeaderValue(req.headers?.['x-forwarded-proto'])
+    ?.split(',')[0]
+    ?.trim()
+    ?.toLowerCase();
+  const proto =
+    forwardedProto === 'http' || forwardedProto === 'https'
+      ? forwardedProto
+      : req.protocol || 'http';
   const host = req.get('host');
   if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
   return `${proto}://${host}`;
+}
+
+function firstHeaderValue(value: unknown): string | undefined {
+  if (Array.isArray(value)) return value[0] == null ? undefined : String(value[0]);
+  return value == null ? undefined : String(value);
 }
 
 function mcpOAuthCallbackUrl(req: any) {

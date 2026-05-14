@@ -5,6 +5,7 @@ export interface ParsedHostHeader {
 }
 
 export interface RequestWithOriginHeaders {
+  method?: unknown;
   headers?: {
     host?: unknown;
     origin?: unknown;
@@ -153,9 +154,18 @@ export function isLocalSameOrigin(
   const extraAllowedOrigins = configuredAllowedOrigins(env);
 
   const localHostAllowed = isAllowedBrowserHost(host, ports, bindHost, []);
-  if (origin == null || origin === '') return localHostAllowed;
+  if (origin == null || origin === '') {
+    if (localHostAllowed) return true;
+    if (!isSafeReadMethod(req.method)) return false;
+    return isAllowedBrowserHost(host, ports, bindHost, extraAllowedOrigins);
+  }
   if (!isAllowedBrowserHost(host, ports, bindHost, extraAllowedOrigins)) return false;
   return isAllowedBrowserOrigin(origin, host, ports, bindHost, extraAllowedOrigins);
+}
+
+function isSafeReadMethod(method: unknown): boolean {
+  const value = String(method || '').toUpperCase();
+  return value === 'GET' || value === 'HEAD';
 }
 
 function headerValue(value: unknown): string | undefined {

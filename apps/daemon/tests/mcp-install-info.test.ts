@@ -89,6 +89,7 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
       port,
       platform: process.platform,
       dataDir,
+      daemonUrl: env.OD_PUBLIC_BASE_URL ?? null,
       electronAsNode: env.ELECTRON_RUN_AS_NODE === '1',
       isSidecarMode,
       sidecarEnv,
@@ -236,6 +237,27 @@ describe('GET /api/mcp/install-info', () => {
       },
     });
     expect(res.status).toBe(200);
+  });
+
+  it('uses OD_PUBLIC_BASE_URL for copied MCP client snippets', async () => {
+    const { port, server } = await startHarness(
+      cliPath,
+      { OD_PUBLIC_BASE_URL: 'https://od.example.com/' },
+      dataDir,
+    );
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
+      const body = await readInstallInfo(res);
+      expect(body.daemonUrl).toBe('https://od.example.com');
+      expect(body.args).toEqual([
+        cliPath,
+        'mcp',
+        '--daemon-url',
+        'https://od.example.com',
+      ]);
+    } finally {
+      await new Promise<void>((done) => server?.close(() => done()));
+    }
   });
 
   it('caches the payload across rapid calls', async () => {
